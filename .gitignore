@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Large / source data
+data/raw_scans/*
+!data/raw_scans/.gitkeep
+
+data/preprocessed/*
+!data/preprocessed/.gitkeep
+
+data/ocr_raw/*
+!data/ocr_raw/.gitkeep
+
+data/ocr_corrected/*
+!data/ocr_corrected/.gitkeep
+
+data/ground_truth/*
+!data/ground_truth/.gitkeep
+
+data/corpus/*
+!data/corpus/.gitkeep
+
+data/translations/*
+!data/translations/.gitkeep
+
+# Models
+models/*
+!models/.gitkeep
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+
+# Outputs / logs
+outputs/*
+!outputs/.gitkeep
+
+outputs/figures/*
+!outputs/figures/.gitkeep
+
+outputs/reports/*
+!outputs/reports/.gitkeep
+
+logs/*
+!logs/.gitkeep
+
+# Evaluation generated files
+evaluation/metrics/*
+!evaluation/metrics/.gitkeep
+
+evaluation/reports/*
+!evaluation/reports/.gitkeep
+
+evaluation/error_logs/*
+!evaluation/error_logs/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python build
+build/
+dist/
+*.egg-info/
