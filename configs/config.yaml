@@ -1,0 +1,100 @@
+project:
+  name: "indic-nlp-challenge"
+  source_language: "hin"
+  secondary_language: "san"
+  target_languages:
+    - "hin"
+    - "ben"
+    - "guj"
+    - "mar"
+    - "tam"
+    - "tel"
+    - "kan"
+    - "mal"
+    - "pan"
+    - "asm"
+    - "ory"
+    - "urd"
+
+paths:
+  raw_scans: "data/raw_scans"
+  preprocessed: "data/preprocessed"
+  ocr_raw: "data/ocr_raw"
+  ocr_corrected: "data/ocr_corrected"
+  ground_truth: "data/ground_truth"
+  corpus: "data/corpus"
+  translations: "data/translations"
+
+  evaluation: "evaluation"
+  metrics: "evaluation/metrics"
+  reports: "evaluation/reports"
+  error_logs: "evaluation/error_logs"
+
+  logs: "logs"
+  models: "models"
+  outputs: "outputs"
+
+preprocessing:
+  input_extension: ".png"
+  experimental_start_page: 5
+  experimental_end_page: 14
+
+  grayscale: true
+  denoise:
+    enabled: true
+    method: "gaussian"
+    kernel_size: 5
+    sigma: 0
+
+  contrast:
+    enabled: true
+    clip_limit: 2.0
+    tile_grid_size: 8
+
+  threshold:
+    otsu: true
+    adaptive: true
+    adaptive_method: "gaussian"
+    block_size: 11
+    constant: 2
+
+  deskew:
+    enabled: true
+    method: "hough"
+
+ocr:
+  languages: "san+hin"
+  engines:
+    - "tesseract"
+    - "paddleocr"
+
+models:
+  indictrans2:
+    enabled: true
+    model_path: "models/indictrans2"
+
+  paddleocr:
+    enabled: true
+    model_path: "models/paddleocr"
+
+  sentence_transformer:
+    enabled: true
+
+  gemini:
+    enabled: true
+
+translation:
+  source_language: "hin"
+  target_languages:
+    - "hin"
+    - "ben"
+    - "guj"
+    - "mar"
+    - "tam"
+    - "tel"
+    - "kan"
+    - "mal"
+    - "pan"
+    - "asm"
+    - "ory"
+    - "urd"
