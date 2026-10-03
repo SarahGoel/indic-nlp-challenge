@@ -126,6 +126,235 @@ def enhance_contrast(
     return result
 
 
+def threshold_otsu(image: np.ndarray) -> np.ndarray:
+    """Apply Otsu's global thresholding to a grayscale image.
+
+    Args:
+        image: Input grayscale image as a NumPy array.
+
+    Returns:
+        Binary image produced using Otsu's thresholding.
+
+    Raises:
+        ValueError: If the input image is not a 2D grayscale image.
+    """
+    if image.ndim != 2:
+        raise ValueError(
+            "threshold_otsu expects a grayscale 2D image."
+        )
+
+    _, result = cv2.threshold(
+        image,
+        0,
+        255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+    )
+
+    logger.debug(
+        "Applied Otsu thresholding: shape={}",
+        image.shape,
+    )
+
+    return result
+
+
+def threshold_adaptive(
+    image: np.ndarray,
+    block_size: int = 11,
+    constant: float = 2.0,
+    method: str = "gaussian",
+) -> np.ndarray:
+    """Apply adaptive thresholding to a grayscale image.
+
+    Args:
+        image: Input grayscale image as a NumPy array.
+        block_size: Size of the local neighbourhood. Must be an odd integer
+            greater than one.
+        constant: Constant subtracted from the local threshold.
+        method: Adaptive thresholding method. Supported values are
+            'gaussian' and 'mean'.
+
+    Returns:
+        Binary image produced using adaptive thresholding.
+
+    Raises:
+        ValueError: If the input image or parameters are invalid.
+    """
+    if image.ndim != 2:
+        raise ValueError(
+            "threshold_adaptive expects a grayscale 2D image."
+        )
+
+    if block_size <= 1 or block_size % 2 == 0:
+        raise ValueError(
+            "block_size must be an odd integer greater than one."
+        )
+
+    method = method.lower()
+
+    if method == "gaussian":
+        adaptive_method = cv2.ADAPTIVE_THRESH_GAUSSIAN_C
+    elif method == "mean":
+        adaptive_method = cv2.ADAPTIVE_THRESH_MEAN_C
+    else:
+        raise ValueError(
+            "method must be either 'gaussian' or 'mean'."
+        )
+
+    result = cv2.adaptiveThreshold(
+        image,
+        255,
+        adaptive_method,
+        cv2.THRESH_BINARY,
+        block_size,
+        constant,
+    )
+
+    logger.debug(
+        "Applied adaptive thresholding: method={}, block_size={}, constant={}",
+        method,
+        block_size,
+        constant,
+    )
+
+    return result
+
+
+def deskew(
+    image: np.ndarray,
+    max_skew_angle: float = 15.0,
+    min_line_length_ratio: float = 0.25,
+    angle_tolerance: float = 1.0,
+) -> np.ndarray:
+    """Correct small rotational skew using Hough-line detection.
+
+    Args:
+        image: Input grayscale or binary image as a NumPy array.
+        max_skew_angle: Maximum absolute skew angle considered reliable.
+        min_line_length_ratio: Minimum detected line length as a fraction
+            of the image width.
+        angle_tolerance: Tolerance in degrees for grouping similar angles.
+
+    Returns:
+        Deskewed image. If no reliable skew can be detected, a copy of the
+        original image is returned unchanged.
+
+    Raises:
+        ValueError: If the input image is not 2D or parameters are invalid.
+    """
+    if image.ndim != 2:
+        raise ValueError(
+            "deskew expects a grayscale or binary 2D image."
+        )
+
+    if max_skew_angle <= 0:
+        raise ValueError(
+            "max_skew_angle must be greater than zero."
+        )
+
+    if not 0 < min_line_length_ratio <= 1:
+        raise ValueError(
+            "min_line_length_ratio must be greater than zero and at most one."
+        )
+
+    if angle_tolerance <= 0:
+        raise ValueError(
+            "angle_tolerance must be greater than zero."
+        )
+
+    height, width = image.shape
+
+    edges = cv2.Canny(
+        image,
+        threshold1=50,
+        threshold2=150,
+        apertureSize=3,
+    )
+
+    min_line_length = max(
+        1,
+        int(width * min_line_length_ratio),
+    )
+
+    lines = cv2.HoughLinesP(
+        edges,
+        rho=1,
+        theta=np.pi / 180,
+        threshold=max(50, min_line_length // 2),
+        minLineLength=min_line_length,
+        maxLineGap=20,
+    )
+
+    if lines is None:
+        logger.warning(
+            "Deskew skipped: no reliable Hough lines detected."
+        )
+        return image.copy()
+
+    candidate_angles: list[float] = []
+
+    for line in lines[:, 0]:
+        x1, y1, x2, y2 = map(int, line)
+
+        dx = x2 - x1
+        dy = y2 - y1
+
+        if dx == 0:
+            continue
+
+        angle = float(np.degrees(np.arctan2(dy, dx)))
+
+        while angle <= -90:
+            angle += 180
+
+        while angle > 90:
+            angle -= 180
+
+        if abs(angle) <= max_skew_angle:
+            candidate_angles.append(angle)
+
+    if not candidate_angles:
+        logger.warning(
+            "Deskew skipped: no reliable near-horizontal lines detected."
+        )
+        return image.copy()
+
+    angle_array = np.asarray(candidate_angles, dtype=np.float32)
+
+    median_angle = float(np.median(angle_array))
+
+    if abs(median_angle) < angle_tolerance:
+        logger.info(
+            "Deskew skipped: detected skew {:.3f}° is within tolerance.",
+            median_angle,
+        )
+        return image.copy()
+
+    center = (width / 2.0, height / 2.0)
+
+    rotation_matrix = cv2.getRotationMatrix2D(
+        center,
+        median_angle,
+        1.0,
+    )
+
+    rotated = cv2.warpAffine(
+        image,
+        rotation_matrix,
+        (width, height),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REPLICATE,
+    )
+
+    logger.info(
+        "Deskew applied: detected angle={:.3f}°, lines={}",
+        median_angle,
+        len(candidate_angles),
+    )
+
+    return rotated
+
+
 def load_image(image_path: Path) -> np.ndarray:
     """Load an image from disk using OpenCV.
 
