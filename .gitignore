@@ -36,8 +36,10 @@ data/ocr_corrected/*
 !data/ocr_corrected/.gitkeep
 
 data/ground_truth/*
+!data/ground_truth/
 !data/ground_truth/ANNOTATION_GUIDELINES.md
-!data/ground_truth/.gitkeep!data/ground_truth/.gitkeep
+!data/ground_truth/ground_truth.jsonl
+!data/ground_truth/.gitkeep
 
 data/corpus/*
 !data/corpus/.gitkeep
