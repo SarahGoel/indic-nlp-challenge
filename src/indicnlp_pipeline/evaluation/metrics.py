@@ -1,4 +1,3 @@
-
 """Evaluation metrics for OCR and machine translation."""
 
 from __future__ import annotations
@@ -6,14 +5,11 @@ from __future__ import annotations
 from rapidfuzz.distance import Levenshtein
 from jiwer import wer as jiwer_wer
 from loguru import logger
+import sacrebleu
 
 
 def _validate_text_inputs(reference: str, hypothesis: str) -> None:
     """Validate reference and hypothesis inputs.
-
-    Args:
-        reference: Ground-truth text.
-        hypothesis: Predicted text.
 
     Raises:
         TypeError: If either input is not a string.
@@ -25,13 +21,12 @@ def _validate_text_inputs(reference: str, hypothesis: str) -> None:
         raise TypeError("hypothesis must be a string.")
 
 
-def _validate_reference(reference: str, hypothesis: str, metric: str) -> None:
+def _validate_reference(
+    reference: str,
+    hypothesis: str,
+    metric: str,
+) -> None:
     """Reject a non-empty hypothesis when the reference is empty.
-
-    Args:
-        reference: Ground-truth text.
-        hypothesis: Predicted text.
-        metric: Name of the evaluation metric.
 
     Raises:
         ValueError: If the reference is empty and the hypothesis is not.
@@ -46,21 +41,7 @@ def _validate_reference(reference: str, hypothesis: str, metric: str) -> None:
 def calculate_cer(reference: str, hypothesis: str) -> float:
     """Calculate character error rate using Levenshtein distance.
 
-    CER is the character-level edit distance divided by the number
-    of characters in the reference.
-
-    Whitespace and Unicode normalization are not modified implicitly.
-
-    Args:
-        reference: Human-corrected reference text.
-        hypothesis: OCR-predicted text.
-
-    Returns:
-        Character error rate as a float.
-
-    Raises:
-        TypeError: If either input is not a string.
-        ValueError: If the reference is empty and the hypothesis is not.
+    Whitespace and Unicode normalization are not changed implicitly.
     """
     _validate_text_inputs(reference, hypothesis)
     _validate_reference(reference, hypothesis, "CER")
@@ -68,8 +49,9 @@ def calculate_cer(reference: str, hypothesis: str) -> float:
     if not reference:
         return 0.0
 
-    edit_distance = Levenshtein.distance(reference, hypothesis)
-    return edit_distance / len(reference)
+    score = Levenshtein.distance(reference, hypothesis) / len(reference)
+    logger.debug("Calculated CER: {:.6f}", score)
+    return float(score)
 
 
 def calculate_wer(reference: str, hypothesis: str) -> float:
@@ -78,20 +60,8 @@ def calculate_wer(reference: str, hypothesis: str) -> float:
     WER is the number of word substitutions, deletions, and insertions
     divided by the number of words in the reference.
 
-    Words are tokenized by whitespace using jiwer's default
-    transformation. Inputs are not implicitly normalized or stripped
-    by this function.
-
-    Args:
-        reference: Human-corrected reference text.
-        hypothesis: OCR-predicted text.
-
-    Returns:
-        Word error rate as a float. The value may exceed 1.0.
-
-    Raises:
-        TypeError: If either input is not a string.
-        ValueError: If the reference is empty and the hypothesis is not.
+    Words are tokenized using jiwer's default transformation. Inputs
+    are not implicitly normalized or stripped by this function.
     """
     _validate_text_inputs(reference, hypothesis)
     _validate_reference(reference, hypothesis, "WER")
@@ -101,4 +71,53 @@ def calculate_wer(reference: str, hypothesis: str) -> float:
 
     score = float(jiwer_wer(reference, hypothesis))
     logger.debug("Calculated WER: {:.6f}", score)
+    return score
+
+
+def calculate_bleu(
+    reference: str,
+    hypothesis: str,
+    *,
+    tokenize: str = "13a",
+) -> float:
+    """Calculate sentence-level BLEU on a 0–100 scale.
+
+    Args:
+        reference: Human-produced reference translation.
+        hypothesis: Machine-produced translation.
+        tokenize: SacreBLEU tokenizer. The default, ``13a``, is a
+            general-purpose tokenizer; select a suitable tokenizer
+            explicitly when evaluating other scripts.
+
+    Returns:
+        BLEU score between 0.0 and 100.0.
+
+    Raises:
+        TypeError: If either text input is not a string.
+        ValueError: If the reference is empty and the hypothesis is
+            non-empty, or if the tokenizer is invalid.
+
+    Notes:
+        BLEU is a corpus-oriented metric. Sentence-level BLEU can be
+        unstable for short translations. For final comparisons, use
+        corpus BLEU over a set of aligned reference/hypothesis segments.
+        A score of zero is returned when both texts are empty.
+    """
+    _validate_text_inputs(reference, hypothesis)
+    _validate_reference(reference, hypothesis, "BLEU")
+
+    if not reference and not hypothesis:
+        return 0.0
+
+    try:
+        result = sacrebleu.sentence_bleu(
+            hypothesis,
+            [reference],
+            tokenize=tokenize,
+        )
+    except (ValueError, KeyError) as exc:
+        raise ValueError(f"Invalid BLEU tokenizer {tokenize!r}: {exc}") from exc
+
+    score = float(result.score)
+    logger.debug("Calculated sentence BLEU: {:.6f}", score)
     return score

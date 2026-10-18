@@ -1,9 +1,9 @@
-
 """Unit tests for OCR and translation evaluation metrics."""
 
 import pytest
 
 from indicnlp_pipeline.evaluation.metrics import (
+    calculate_bleu,
     calculate_cer,
     calculate_wer,
 )
@@ -137,7 +137,6 @@ def test_wer_empty_reference_nonempty_hypothesis() -> None:
 
 
 def test_wer_whitespace_tokenization() -> None:
-    # WER uses word tokens, so a trailing space does not add a word.
     assert calculate_wer("a", "a ") == 0.0
 
 
@@ -166,3 +165,63 @@ def test_wer_rejects_non_string_inputs(
 ) -> None:
     with pytest.raises(TypeError):
         calculate_wer(reference, hypothesis)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------
+# BLEU
+# ---------------------------------------------------------------------
+
+
+def test_bleu_exact_match() -> None:
+    assert calculate_bleu(
+        "the cat is here",
+        "the cat is here",
+    ) == pytest.approx(100.0)
+
+
+def test_bleu_returns_score_on_zero_to_hundred_scale() -> None:
+    score = calculate_bleu(
+        "the cat is sitting on the mat",
+        "the cat is sitting on a mat",
+    )
+    assert 0.0 <= score <= 100.0
+
+
+def test_bleu_devanagari_exact_match() -> None:
+    text = "\u0930\u093e\u092e \u0918\u0930 \u0917\u092f\u093e"
+    assert calculate_bleu(text, text) == pytest.approx(100.0)
+
+
+def test_bleu_empty_strings() -> None:
+    assert calculate_bleu("", "") == 0.0
+
+
+def test_bleu_empty_reference_nonempty_hypothesis() -> None:
+    with pytest.raises(ValueError, match="empty reference"):
+        calculate_bleu("", "prediction")
+
+
+@pytest.mark.parametrize(
+    ("reference", "hypothesis"),
+    [
+        (None, "text"),
+        ("text", None),
+        (123, "text"),
+        ("text", 123),
+    ],
+)
+def test_bleu_rejects_non_string_inputs(
+    reference: object,
+    hypothesis: object,
+) -> None:
+    with pytest.raises(TypeError):
+        calculate_bleu(reference, hypothesis)  # type: ignore[arg-type]
+
+
+def test_bleu_rejects_invalid_tokenizer() -> None:
+    with pytest.raises(ValueError, match="Invalid BLEU tokenizer"):
+        calculate_bleu(
+            "the cat is here",
+            "the cat is here",
+            tokenize="not-a-real-tokenizer",
+        )
