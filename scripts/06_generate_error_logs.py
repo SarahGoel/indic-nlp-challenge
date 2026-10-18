@@ -22,6 +22,7 @@ if str(ROOT / "src") not in sys.path:
 
 from indicnlp_pipeline.error_analysis.classifier import (  # noqa: E402
     ERROR_RECORD_FIELDS,
+    classify_error,
     make_error_id,
 )
 
@@ -74,7 +75,7 @@ def severity_for(reference: str, output: str) -> str:
         return "high"
 
     similarity = SequenceMatcher(
-        None, reference_cmp, output_cmp, autojunk=False
+        None, reference_cmp, output_cmp, autojunk=True
     ).ratio()
 
     if similarity >= 0.90:
@@ -225,6 +226,16 @@ def build_ocr_errors(
 
             stats["mismatching_engine_outputs"] += 1
             severity = severity_for(reference, output)
+            classification = classify_error(
+                stage="ocr",
+                evidence={
+                    "rationale": (
+                        "OCR output differs from verified corpus ground truth."
+                    )
+                },
+                category="ocr",
+                severity=severity,
+            )
 
             # Include engine and preprocessing variant in the deterministic
             # ID input while preserving the canonical CSV columns.
@@ -241,16 +252,16 @@ def build_ocr_errors(
             rows.append({
                 "error_id": error_id,
                 "segment_id": segment_id,
-                "stage": "ocr",
-                "category": "ocr",
+                "stage": classification.stage.value,
+                "category": classification.category.value,
                 "system_output": output,
                 "reference_text": reference,
-                "severity": severity,
+                "severity": classification.severity.value,
             })
             reference_cmp = normalized_for_comparison(reference)
             output_cmp = normalized_for_comparison(output)
             similarity = SequenceMatcher(
-                None, reference_cmp, output_cmp, autojunk=False
+                None, reference_cmp, output_cmp, autojunk=True
             ).ratio()
 
             provenance.append({
@@ -362,6 +373,17 @@ def build_translation_errors() -> tuple[
                     corpus_record.get("segment_id") or annotation_id
                 )
                 severity = severity_for(human_reference, output)
+                classification = classify_error(
+                    stage="translation",
+                    evidence={
+                        "rationale": (
+                            "System translation differs from the supplied "
+                            "human reference."
+                        )
+                    },
+                    category="translation",
+                    severity=severity,
+                )
                 error_id = make_error_id(
                     segment_id,
                     "translation",
@@ -377,11 +399,11 @@ def build_translation_errors() -> tuple[
                 rows.append({
                     "error_id": error_id,
                     "segment_id": segment_id,
-                    "stage": "translation",
-                    "category": "translation",
+                    "stage": classification.stage.value,
+                    "category": classification.category.value,
                     "system_output": output,
                     "reference_text": human_reference,
-                    "severity": severity,
+                    "severity": classification.severity.value,
                 })
                 provenance.append({
                     "error_id": error_id,
