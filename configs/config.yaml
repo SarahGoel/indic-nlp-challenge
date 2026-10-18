@@ -55,8 +55,8 @@ preprocessing:
     otsu: true
     adaptive: true
     adaptive_method: "gaussian"
-    block_size: 11
-    constant: 2
+    block_size: 41
+    constant: 15
 
   deskew:
     enabled: true
