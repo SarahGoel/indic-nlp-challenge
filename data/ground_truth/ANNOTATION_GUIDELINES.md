@@ -39,6 +39,15 @@ Never modify files in `data/raw_scans/` during annotation.
 - Do not infer missing text from context or another edition without recording the issue and its evidence.
 - Keep transcription separate from interpretation, language classification, and translation.
 
+### 4.1 Traditional and Astrological Terminology
+
+- Transcribe traditional astrological, astronomical, philosophical, and religious terminology as printed in the source.
+- Preserve the source spelling and grammatical form, including unfamiliar Sanskrit-derived terms appearing in Hindi prose.
+- Do not replace a term with a modern equivalent, synonym, or presumed correction.
+- Use surrounding context to flag a possible reading, but verify the reading against the original scan before accepting it.
+- If a term remains ambiguous, preserve the best-supported reading when possible and document the uncertainty.
+- Any glossary or normalized terminology mapping must be maintained separately from the source-faithful transcription.
+
 ## 5. Devanagari Character Handling
 
 Inspect character-level details carefully, especially:
@@ -115,6 +124,15 @@ Do not mark a record `verified` merely because two OCR engines agree. A verified
 
 The final serialization schema must define which statuses are valid for each record type and how unresolved text is represented.
 
+### 11.1 Confidence Conventions
+
+- Confidence must describe the annotator's confidence in the transcription as supported by the original source image, not the OCR engine's confidence score.
+- Use a numeric confidence value between 0.0 and 1.0 only after the project schema defines its exact interpretation and validation rules.
+- A high confidence value must not substitute for source-image review or the required verification process.
+- If confidence is low or a reading remains ambiguous, record the uncertainty and explain the affected text in the annotation notes.
+- Do not assign confidence values retrospectively without a documented basis.
+- OCR-engine confidence scores, annotator confidence, and verification status are distinct concepts and must not be treated as interchangeable.
+
 ## 12. Provenance and Traceability
 
 Each annotation must be traceable to its source. Record or link the following information through the project schema:
@@ -147,6 +165,15 @@ For every annotation:
 8. Mark the record verified only when the applicable review requirements are satisfied.
 
 If a later review changes a verified transcription, preserve an auditable record of the change rather than concealing the earlier decision.
+
+### 13.1 Disagreement Resolution
+
+- When annotators disagree, compare each proposed reading against the original page image. OCR output and linguistic context may support the review but cannot override the source image.
+- Record the competing readings, the affected page or text location, and the evidence supporting the decision.
+- If the disagreement cannot be resolved, refer it to a designated reviewer when available.
+- If the reading remains unresolved, retain an appropriate uncertain status rather than selecting a reading without sufficient evidence.
+- Record the final decision, reviewer identifier where applicable, and the reason for any consequential change.
+- Preserve an auditable history of changes to previously verified annotations.
 
 ## 14. Separation from Downstream Processing
 
