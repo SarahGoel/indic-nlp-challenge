@@ -1,0 +1,135 @@
+# Phase 5 — Multilingual Translation Compatibility Matrix
+# Project: Shri Bhrigu Samhita Kundali Rahasyam, Volume 5
+# Encoding: UTF-8
+#
+# "configured" means the pair is included in the project configuration.
+# It does not mean that translation quality has been validated.
+# Model support must be verified against the selected checkpoint.
+
+schema_version: "1.0"
+
+project:
+  primary_source_language: hin
+  secondary_source_language: san
+  script: Devanagari
+
+languages:
+  hin:
+    name: Hindi
+    model_code: hin_Deva
+    script: Devanagari
+  san:
+    name: Sanskrit
+    model_code: san_Deva
+    script: Devanagari
+  ben:
+    name: Bengali
+    model_code: ben_Beng
+    script: Bengali
+  guj:
+    name: Gujarati
+    model_code: guj_Gujr
+    script: Gujarati
+  mar:
+    name: Marathi
+    model_code: mar_Deva
+    script: Devanagari
+  tam:
+    name: Tamil
+    model_code: tam_Taml
+    script: Tamil
+  tel:
+    name: Telugu
+    model_code: tel_Telu
+    script: Telugu
+  kan:
+    name: Kannada
+    model_code: kan_Knda
+    script: Kannada
+  mal:
+    name: Malayalam
+    model_code: mal_Mlym
+    script: Malayalam
+  pan:
+    name: Punjabi
+    model_code: pan_Guru
+    script: Gurmukhi
+  asm:
+    name: Assamese
+    model_code: asm_Beng
+    script: Bengali-Assamese
+  ory:
+    name: Odia
+    model_code: ory_Orya
+    script: Odia
+  urd:
+    name: Urdu
+    model_code: urd_Arab
+    script: Perso-Arabic
+
+backends:
+  indictrans2:
+    type: local
+    checkpoint: ai4bharat/indictrans2-indic-indic-dist-320M
+    language_codes: model_code
+    support_reference: "https://github.com/ai4bharat/IndicTrans2"
+    pair_validation_required: true
+
+  gemini:
+    type: api
+    model: null
+    api_key_env: GEMINI_API_KEY
+    language_codes: project_language_code
+    pair_validation_required: true
+
+translation_matrix:
+  hin:
+    hin:
+      status: excluded
+      reason: Same-language operation; not a translation pair.
+    ben: { status: configured }
+    guj: { status: configured }
+    mar: { status: configured }
+    tam: { status: configured }
+    tel: { status: configured }
+    kan: { status: configured }
+    mal: { status: configured }
+    pan: { status: configured }
+    asm: { status: configured }
+    ory: { status: configured }
+    urd: { status: configured }
+
+  san:
+    hin: { status: configured }
+    ben: { status: configured }
+    guj: { status: configured }
+    mar: { status: configured }
+    tam: { status: configured }
+    tel: { status: configured }
+    kan: { status: configured }
+    mal: { status: configured }
+    pan: { status: configured }
+    asm: { status: configured }
+    ory: { status: configured }
+    urd: { status: configured }
+
+validation:
+  required_source_languages: [hin, san]
+  required_target_languages:
+    - hin
+    - ben
+    - guj
+    - mar
+    - tam
+    - tel
+    - kan
+    - mal
+    - pan
+    - asm
+    - ory
+    - urd
+  require_unique_model_codes: true
+  require_pair_level_testing: true
+  preserve_source_text: true
+  preserve_segment_ids: true
+  output_encoding: utf-8
