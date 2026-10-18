@@ -223,7 +223,7 @@ def threshold_adaptive(
 def deskew(
     image: np.ndarray,
     max_skew_angle: float = 15.0,
-    min_line_length_ratio: float = 0.25,
+    min_line_length_ratio: float = 0.10,
     angle_tolerance: float = 1.0,
 ) -> np.ndarray:
     """Correct small rotational skew using Hough-line detection.
