@@ -102,3 +102,35 @@ def test_ocr_comparison_requires_verified_reference(tmp_path, monkeypatch):
     assert rows == []
     assert provenance == []
     assert stats["unmatched_reference_files"] == 1
+
+
+
+def test_page_level_ocr_is_skipped_for_segment_reference(
+    tmp_path, monkeypatch
+):
+    comparisons = tmp_path / "ocr_comparisons"
+    comparisons.mkdir()
+    monkeypatch.setattr(module, "COMPARISON_DIR", comparisons)
+
+    (comparisons / "BRIGU_V5_P0005__grayscale.json").write_text(
+        '{"source_page":"BRIGU_V5_P0005",'
+        '"preprocessing_variant":"grayscale",'
+        '"comparison":{"tesseract_text":"पृष्ठ-स्तरीय OCR",'
+        '"paddleocr_text":"पृष्ठ-स्तरीय OCR"}}',
+        encoding="utf-8",
+    )
+
+    reference = {
+        "segment_id": "BRIGU_V5_P0005_SEG001",
+        "ground_truth": "यह सत्यापित खंड है।",
+    }
+
+    rows, provenance, stats = module.build_ocr_errors(
+        {"BRIGU_V5_P0005": reference}
+    )
+
+    assert rows == []
+    assert provenance == []
+    assert stats["matched_reference_files"] == 1
+    assert stats["unaligned_reference_files"] == 1
+    assert stats["mismatching_engine_outputs"] == 0

@@ -168,6 +168,7 @@ def build_ocr_errors(
         "comparison_files": 0,
         "matched_reference_files": 0,
         "unmatched_reference_files": 0,
+        "unaligned_reference_files": 0,
         "invalid_or_missing_engine_texts": 0,
         "matching_outputs": 0,
         "mismatching_engine_outputs": 0,
@@ -197,6 +198,22 @@ def build_ocr_errors(
         stats["matched_reference_files"] += 1
         comparison = data.get("comparison")
         if not isinstance(comparison, dict):
+            continue
+
+        reference_segment_id = str(
+            reference_record.get("segment_id")
+            or reference_record.get("id")
+            or ""
+        )
+        comparison_segment_id = data.get("segment_id")
+        if comparison_segment_id is None:
+            comparison_segment_id = comparison.get("segment_id")
+
+        if (
+            not isinstance(comparison_segment_id, str)
+            or comparison_segment_id != reference_segment_id
+        ):
+            stats["unaligned_reference_files"] += 1
             continue
 
         reference = reference_record["ground_truth"]
