@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import importlib.util
 from pathlib import Path
 
@@ -39,6 +39,32 @@ def test_severity_is_deterministic():
 
     assert module.severity_for(reference, output) == "low"
     assert module.severity_for(reference, "पूर्णतः अलग") == "critical"
+
+
+def test_long_devanagari_similarity_is_not_deflated_by_autojunk():
+    # Regression: difflib's autojunk treats characters occurring in more than 1%
+    # of a long sequence as "popular junk", which deflates the similarity of long
+    # Devanagari passages and forces partially-correct OCR output to "critical".
+    reference = (
+        "इस जन्माङ्ग चक्र में उत्पन्न मनुष्य कोमल प्रकृति शर्मीले स्वभाव का "
+        "सुंदर आकर्षक एवं प्रतापी होता है "
+        "इसे अपने परिवारजनों द्वारा कष्ट प्राप्त होता है "
+        "बंधु बांधव इसे द्वेष मानते हैं "
+        "इसके सभी कार्य हानि देने वाले सिद्ध होते हैं "
+        "योग्य होते हुए भी इस पर अयोग्यता का दोषारोपण किया जाता है"
+    )
+    confusables = "कखगचछजटठडढणतथदधनपफबभमयरलवशषसहािीुूेैोौंः"
+    output = "".join(
+        confusables[index % len(confusables)]
+        if index % 3 == 0 and character != " "
+        else character
+        for index, character in enumerate(reference)
+    )
+
+    assert len(reference) > 200
+    # With autojunk=True this pair scores ~0.04 and would be mislabelled
+    # "critical"; the correct severity for this degree of corruption is "medium".
+    assert module.severity_for(reference, output) == "medium"
 
 
 def test_make_record_preserves_devanagari():

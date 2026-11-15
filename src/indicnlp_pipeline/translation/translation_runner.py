@@ -516,10 +516,13 @@ def run_translations(
                     )
 
             except Exception as exc:
-                logger.exception(
-                    "IndicTrans2 batch failed for {}->{}.",
+                # Avoid tracebacks: backend exception state can include
+                # request headers that embed credentials.
+                logger.error(
+                    "IndicTrans2 batch failed for {}->{} ({}).",
                     source_language,
                     target_language,
+                    type(exc).__name__,
                 )
 
                 results = [
@@ -557,11 +560,14 @@ def run_translations(
                     )
 
                 except Exception as exc:
-                    logger.exception(
-                        "Gemini segment failed: {} {}->{}.",
+                    # Avoid tracebacks: backend exception state can include
+                    # request headers that embed credentials.
+                    logger.error(
+                        "Gemini segment failed: {} {}->{} ({}).",
                         source_record["annotation_id"],
                         source_language,
                         target_language,
+                        type(exc).__name__,
                     )
 
                     results.append(

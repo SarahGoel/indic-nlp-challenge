@@ -77,7 +77,10 @@ backends:
 
   gemini:
     type: api
-    model: null
+    # Verified during Phase I: model exists and the API key is accepted, but
+    # the service returned HTTP 503 (transient high demand) on every probe.
+    # gemini-2.5-flash, gemini-1.5-flash, and gemini-2.0-flash returned 404.
+    model: gemini-3.8-flash
     api_key_env: GEMINI_API_KEY
     language_codes: project_language_code
     pair_validation_required: true

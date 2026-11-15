@@ -19,9 +19,12 @@ def configure_logger(
 
     logger.remove()
 
+    # diagnose=False prevents Loguru from embedding local variable values in
+    # tracebacks, so credentials passed as arguments are never written to logs.
     logger.add(
         sys.stderr,
         level=log_level,
+        diagnose=False,
     )
 
     logger.add(
@@ -31,4 +34,5 @@ def configure_logger(
         rotation="10 MB",
         retention=5,
         enqueue=True,
+        diagnose=False,
     )

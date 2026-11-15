@@ -47,6 +47,16 @@ data/corpus/*
 data/translations/*
 !data/translations/.gitkeep
 
+# Large derived full-volume outputs (regenerable via scripts/09-14)
+data/nlp/*
+data/ocr_full/*
+data/ocr_gemini_full/*
+data/ocr_normalized/*
+data/ocr_paddle_full/*
+data/ocr_paddle_test/*
+data/ocr_pilot/*
+data/ocr_shards/*
+
 # Models
 models/*
 !models/.gitkeep
@@ -75,9 +85,17 @@ evaluation/metrics/*
 
 evaluation/reports/*
 !evaluation/reports/.gitkeep
+!evaluation/reports/research_report.md
+!evaluation/reports/reproducibility_manifest.json
+!evaluation/reports/error_analysis.md
+!evaluation/reports/final_metric_summary.md
+!evaluation/reports/release_readiness.md
+!evaluation/reports/translation_capability_matrix.md
+!evaluation/reports/phase_j_translation_coverage.md
 
 evaluation/error_logs/*
 !evaluation/error_logs/.gitkeep
+!evaluation/error_logs/STEP63_DRY_RUN.md
 
 # Temporary files
 *.tmp

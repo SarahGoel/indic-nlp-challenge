@@ -212,7 +212,12 @@ class GeminiTranslationEngine:
         try:
             self.client = genai.Client(api_key=resolved_api_key)
         except Exception as exc:
-            logger.exception("Gemini client initialization failed.")
+            # Do not log the traceback: library exception state can include
+            # request headers that embed the API key.
+            logger.error(
+                "Gemini client initialization failed ({}).",
+                type(exc).__name__,
+            )
             raise GeminiEngineError(
                 "Could not initialize the Gemini client."
             ) from exc
@@ -306,10 +311,13 @@ class GeminiTranslationEngine:
         except GeminiEngineError:
             raise
         except Exception as exc:
-            logger.exception(
-                "Gemini translation request failed: {} -> {}.",
+            # Do not log the traceback: library exception state can include
+            # request headers that embed the API key.
+            logger.error(
+                "Gemini translation request failed: {} -> {} ({}).",
                 source_code,
                 target_code,
+                type(exc).__name__,
             )
             raise GeminiEngineError(
                 f"Gemini translation failed for "

@@ -215,7 +215,12 @@ class IndicTransEngine:
             processor = IndicProcessor(inference=True)
 
         except Exception as exc:
-            logger.exception("IndicTrans2 model initialization failed.")
+            # Avoid tracebacks: library state can include request headers or
+            # environment-derived credentials.
+            logger.error(
+                "IndicTrans2 model initialization failed ({}).",
+                type(exc).__name__,
+            )
             raise IndicTransEngineError(
                 "Could not load the IndicTrans2 model. Check checkpoint "
                 "availability, Hugging Face access requirements, local cache, "
@@ -331,10 +336,13 @@ class IndicTransEngine:
         except IndicTransEngineError:
             raise
         except Exception as exc:
-            logger.exception(
-                "Translation failed for language pair {}->{}.",
+            # Avoid tracebacks: library state can include environment-derived
+            # credentials.
+            logger.error(
+                "Translation failed for language pair {}->{} ({}).",
                 source_lang,
                 target_lang,
+                type(exc).__name__,
             )
             raise IndicTransEngineError(
                 f"Translation failed for {source_lang}->{target_lang}."

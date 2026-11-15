@@ -1,43 +1,111 @@
-# Indic NLP & Multilingual AI Challenge
+# Indic NLP Pipeline
 
-A research-oriented pipeline for processing scanned Hindi and Sanskrit
-manuscript pages into structured text and preparing them for multilingual
-NLP and translation experiments.
+A pipeline for processing scanned manuscripts into structured text and preparing them for multilingual translation.
 
-## Project source
+## Features
 
-- Source: Shri Bhrigu Samhita Kundali Rahasyam – Volume 5
-- Primary language: Hindi (`hin`)
-- Secondary language: Sanskrit (`san`)
-- Script: Devanagari
-- Experimental development subset: PDF pages 5–14
-- Evaluation subset: 100 pages; selection and evaluation are tracked separately
+- PDF to page image extraction
+- OCR text extraction (Hindi/Sanskrit/Devanagari)
+- Text normalization and cleaning
+- Translation to 11 target languages
+- DOCX export for OCR and translated text
 
-Raw scans and raw OCR outputs are source artifacts. Processing stages should
-write separate outputs rather than silently overwriting upstream data.
+## Supported Languages
 
-## Environment
+**Source:**
+- Hindi (hin)
+- Sanskrit (san)
 
-The current development environment uses Python 3.11 in a project-specific
-virtual environment. Activate the environment before running commands.
+**Target Languages:**
+- Bengali (ben)
+- Gujarati (guj)
+- Marathi (mar)
+- Tamil (tam)
+- Telugu (tel)
+- Kannada (kan)
+- Malayalam (mal)
+- Punjabi (pan)
+- Assamese (asm)
+- Odia (ory)
+- Urdu (urd)
 
-From the repository root, install project dependencies according to the
-repository's dependency instructions, then run tests with:
+## Installation
 
-```powershell
-python -m pytest -q
+```bash
+pip install -r requirements.txt
 ```
 
-## Step 30 — Normalization and segmentation
+## Usage
 
-### Purpose
+Run the complete pipeline on any PDF:
 
-`scripts/03_normalize_and_segment.py` reads the existing canonical corpus,
-normalizes its ground-truth text, segments it, identifies likely language
-labels, tokenizes segments, and writes run-specific outputs.
+```bash
+python scripts/run_pipeline.py --input manuscript.pdf --target-language ben
+```
 
-The script does not modify the input corpus in place. Each run writes to a
-new timestamped directory under `outputs/normalization_runs/` by default.
+This will:
+1. Extract pages from PDF
+2. Run OCR on all pages
+3. Normalize text
+4. Translate to target language
+5. Export translated text to DOCX
+
+To also export the original OCR text:
+
+```bash
+python scripts/run_pipeline.py --input manuscript.pdf --target-language tam --export-ocr
+```
+
+## Individual Steps
+
+### OCR Export
+Export original OCR text to DOCX without translation:
+
+```bash
+python scripts/17_export_ocr_docx.py
+```
+
+### Translation
+Translate OCR text to a target language and export to DOCX:
+
+```bash
+python scripts/18_translate_and_export.py --target-language ben
+```
+
+## Pipeline Output
+
+All outputs are written to the specified output directory (default: `pipeline_output/`):
+
+- `pages/` - Extracted page images
+- `ocr/` - OCR results (JSON)
+- `normalized/` - Normalized text
+- `translated/` - Translated text (JSON)
+- `translated_<language>.docx` - Final DOCX output
+
+## Dependencies
+
+- pypdfium2 - PDF processing
+- pytesseract - OCR engine
+- Pillow - Image processing
+- transformers - Translation model
+- IndicTransToolkit - Indic language translation
+- loguru - Logging
+
+## Translation Requirements
+
+IndicTransToolkit is required for translation. Installation requires compilation tools.
+
+**On Windows:**
+Install Microsoft C++ Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+**On Linux:**
+```bash
+pip install IndicTransToolkit
+```
+
+## License
+
+See LICENSE file for details.
 
 ### Run the experimental subset
 
@@ -73,15 +141,15 @@ and a `ground_truth` text field.
 
 Every run produces the following files:
 
-| File | Purpose |
-| --- | --- |
-| `normalized.jsonl` | Normalized text records |
-| `segments.jsonl` | Text segments with traceable identifiers and boundaries |
-| `language_identification.jsonl` | Language label and identification details per segment |
-| `tokens.jsonl` | Tokens with segment references and character offsets |
-| `errors.jsonl` | Per-record processing errors, when any occur |
-| `validation_report.json` | Counts and validation checks for the run |
-| `run_metadata.json` | Input hash, run times, environment, page range, and output names |
+| File                            | Purpose                                                          |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `normalized.jsonl`              | Normalized text records                                          |
+| `segments.jsonl`                | Text segments with traceable identifiers and boundaries          |
+| `language_identification.jsonl` | Language label and identification details per segment            |
+| `tokens.jsonl`                  | Tokens with segment references and character offsets             |
+| `errors.jsonl`                  | Per-record processing errors, when any occur                     |
+| `validation_report.json`        | Counts and validation checks for the run                         |
+| `run_metadata.json`             | Input hash, run times, environment, page range, and output names |
 
 Run-specific artifacts should be inspected before a run is accepted. Check
 that selected records are accounted for, segment text is nonempty, token
@@ -107,7 +175,7 @@ The pilot run processed PDF pages 5–14 inclusive:
 - Nonempty segments and valid token offsets reported by validation
 - Input corpus SHA-256 recorded in `run_metadata.json`
 
-The full test suite passed with 86 tests during this development session.
+The full test suite passed with 222 tests (`python -m pytest -q`), with 0 failures in the latest verification run.
 The two focused tests for the Step 30 executable also passed after the test
 fixture was aligned with the script's input schema.
 
