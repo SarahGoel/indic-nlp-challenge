@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IndicScript — Manuscript Transcription & Translation</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- Liquid/Glass Ambient Background Orbs -->
+    <div class="ambient-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <!-- Navigation Bar -->
+    <header class="navbar">
+        <div class="nav-container">
+            <div class="nav-left">
+                <a href="#" class="logo">
+                    <i class="fa-solid fa-feather-pointed"></i>
+                    <span>IndicScript</span>
+                </a>
+            </div>
+            
+            <nav class="nav-center">
+                <a href="#about">About</a>
+                <a href="#how-it-works">How it works</a>
+                <a href="#faqs">FAQs</a>
+            </nav>
+
+            <div class="nav-right">
+                <button id="theme-toggle" class="icon-btn" aria-label="Toggle theme">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+                <a href="#login" class="btn btn-secondary" id="nav-login-btn">Login</a>
+                <a href="#signup" class="btn btn-primary" id="nav-signup-btn">Sign up</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Container -->
+    <main class="dashboard-container">
+        <section class="workspace-header">
+            <h1>Indic Manuscript Workspace</h1>
+            <p>Convert handwritten Indic manuscripts into editable text and translations instantly.</p>
+        </section>
+
+        <div class="workspace-grid">
+            
+            <!-- Left Panel: Upload & Config -->
+            <div class="panel upload-panel">
+                <div class="panel-title">
+                    <span>01. Upload Manuscript</span>
+                </div>
+
+                <!-- Dropzone -->
+                <div class="dropzone" id="dropzone">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <p>Drag & drop your file here, or <span class="browse-link">browse</span></p>
+                    <span class="file-formats">Supports PDF, PNG, JPG, JPEG</span>
+                    <input type="file" id="file-input" accept=".pdf, .png, .jpg, .jpeg" hidden>
+                </div>
+
+                <div id="file-info" class="file-info hidden">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span id="file-name">filename.png</span>
+                    <button id="remove-file" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <!-- Language Selections -->
+                <div class="form-group">
+                    <label for="source-lang">Source Language</label>
+                    <select id="source-lang">
+                        <option value="assamese">Assamese (অসমীয়া)</option>
+                        <option value="bengali">Bengali (বাংলা)</option>
+                        <option value="bodo">Bodo (बड़ो)</option>
+                        <option value="dogri">Dogri (डोगरी)</option>
+                        <option value="gujarati">Gujarati (ગુજરાતી)</option>
+                        <option value="hindi" selected>Hindi (हिन्दी)</option>
+                        <option value="kannada">Kannada (ಕನ್ನಡ)</option>
+                        <option value="kashmiri">Kashmiri (कॉशुर)</option>
+                        <option value="konkani">Konkani (कोंकणी)</option>
+                        <option value="maithili">Maithili (मैथिली)</option>
+                        <option value="malayalam">Malayalam (മലയാളം)</option>
+                        <option value="manipuri">Manipuri (মৈতৈলোন্)</option>
+                        <option value="marathi">Marathi (मराठी)</option>
+                        <option value="nepali">Nepali (नेपाली)</option>
+                        <option value="odia">Odia (ଓଡ଼ିଆ)</option>
+                        <option value="punjabi">Punjabi (ਪੰਜਾਬੀ)</option>
+                        <option value="sanskrit">Sanskrit (संस्कृतम्)</option>
+                        <option value="santali">Santali (संताली)</option>
+                        <option value="sindhi">Sindhi (सिंधी)</option>
+                        <option value="tamil">Tamil (தமிழ்)</option>
+                        <option value="telugu">Telugu (తెలుగు)</option>
+                        <option value="urdu">Urdu (اردو)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="target-lang">Translate Into</label>
+                    <select id="target-lang">
+                        <option value="assamese">Assamese (অসমীয়া)</option>
+                        <option value="bengali">Bengali (বাংলা)</option>
+                        <option value="bodo">Bodo (बड़ो)</option>
+                        <option value="dogri">Dogri (डोगरी)</option>
+                        <option value="english" selected>English</option>
+                        <option value="gujarati">Gujarati (ગુજરાતી)</option>
+                        <option value="hindi">Hindi (हिन्दी)</option>
+                        <option value="kannada">Kannada (ಕನ್ನಡ)</option>
+                        <option value="kashmiri">Kashmiri (कॉशुर)</option>
+                        <option value="konkani">Konkani (कोंकणी)</option>
+                        <option value="maithili">Maithili (मैथिली)</option>
+                        <option value="malayalam">Malayalam (മലയാളം)</option>
+                        <option value="manipuri">Manipuri (মৈতৈলোন্)</option>
+                        <option value="marathi">Marathi (मराठी)</option>
+                        <option value="nepali">Nepali (नेपाली)</option>
+                        <option value="odia">Odia (ଓଡ଼ିଆ)</option>
+                        <option value="punjabi">Punjabi (ਪੰਜਾਬੀ)</option>
+                        <option value="sanskrit">Sanskrit (संस्कृतम्)</option>
+                        <option value="santali">Santali (संताली)</option>
+                        <option value="sindhi">Sindhi (सिंधी)</option>
+                        <option value="tamil">Tamil (தமிழ்)</option>
+                        <option value="telugu">Telugu (తెలుగు)</option>
+                        <option value="urdu">Urdu (اردو)</option>
+                    </select>
+                </div>
+
+                <button id="process-btn" class="btn btn-primary btn-block" disabled>
+                    Get Started <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- Right Panel: Results & Tabs -->
+            <div class="panel results-panel">
+                <div class="panel-title">
+                    <span>02. Results</span>
+                    <div class="action-buttons">
+                        <button id="copy-btn" class="action-icon-btn" title="Copy Text" disabled><i class="fa-solid fa-copy"></i></button>
+                        <button id="download-btn" class="action-icon-btn" title="Download TXT" disabled><i class="fa-solid fa-download"></i></button>
+                    </div>
+                </div>
+
+                <!-- Tabs Header -->
+                <div class="tabs-header">
+                    <button class="tab-btn active" data-tab="transcription">Transcription</button>
+                    <button class="tab-btn" data-tab="translation">Translation</button>
+                </div>
+
+                <!-- Tabs Content -->
+                <div class="tabs-content">
+                    <div id="transcription-tab" class="tab-pane active">
+                        <textarea id="transcription-output" placeholder="Your transcribed manuscript text will appear here..." readonly></textarea>
+                    </div>
+                    <div id="translation-tab" class="tab-pane">
+                        <textarea id="translation-output" placeholder="Your translated text will appear here..." readonly></textarea>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Sections for About, How It Works, and FAQs -->
+        <section id="about" class="info-section">
+            <div class="info-container">
+                <h2>About IndicScript</h2>
+                <p>IndicScript is an advanced manuscript digitization tool designed to bridge the gap between ancient Indian heritage and modern technology. Using specialized AI models tailored for Devanagari and regional scripts, we turn historical handwritten manuscripts into searchable, editable digital archives.</p>
+            </div>
+        </section>
+
+        <section id="how-it-works" class="info-section">
+            <div class="info-container">
+                <h2>How It Works</h2>
+                <div class="steps-grid">
+                    <div class="step-card">
+                        <h3>1. Upload</h3>
+                        <p>Upload a clean photo, scan, or PDF of your historical or handwritten manuscript document.</p>
+                    </div>
+                    <div class="step-card">
+                        <h3>2. Process & OCR</h3>
+                        <p>Select your source and target languages. Our pipeline analyzes characters and extracts the text accurately.</p>
+                    </div>
+                    <div class="step-card">
+                        <h3>3. Translate & Export</h3>
+                        <p>Review the transcription, view the instant translation tab, and download your text file with one click.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="faqs" class="info-section">
+            <div class="info-container">
+                <h2>Frequently Asked Questions</h2>
+                <div class="faq-item">
+                    <h4>What file formats are supported?</h4>
+                    <p>Currently, IndicScript supports high-resolution PDF, PNG, and JPG files.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>How accurate is the transcription?</h4>
+                    <p>Accuracy depends on the clarity of the manuscript handwriting, but our models are specifically optimized for historical Indic scripts.</p>
+                </div>
+                <div class="faq-item">
+                    <h4>Can I edit the extracted text?</h4>
+                    <p>Yes! Both the transcription and translation output panels feature editable text areas so you can correct any OCR discrepancies on the fly.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Authentication Modal (Popup) -->
+    <div id="auth-modal" class="modal hidden">
+        <div class="modal-content">
+            <button id="close-modal" class="icon-btn"><i class="fa-solid fa-xmark"></i></button>
+            
+            <div class="modal-header">
+                <h2 id="modal-title">Welcome Back</h2>
+                <p id="modal-subtitle">Enter your credentials to access your workspace</p>
+            </div>
+
+            <form id="auth-form">
+                <div id="name-field" class="form-group hidden">
+                    <label for="auth-name">Full Name</label>
+                    <input type="text" id="auth-name" placeholder="John Doe">
+                </div>
+
+                <div class="form-group">
+                    <label for="auth-email">Email Address</label>
+                    <input type="email" id="auth-email" placeholder="name@example.com" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="auth-password">Password</label>
+                    <input type="password" id="auth-password" placeholder="••••••••" required>
+                </div>
+
+                <button type="submit" id="auth-submit-btn" class="btn btn-primary btn-block">Login</button>
+            </form>
+
+            <div class="modal-switch">
+                <p id="switch-text">Don't have an account? <a href="#" id="switch-mode-btn">Sign up</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
