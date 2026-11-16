@@ -1,6 +1,51 @@
 # Indic NLP Pipeline
 
+[![Live on Render](https://img.shields.io/badge/Render-Live-46E3B7?logo=render&logoColor=white)](https://indic-nlp-challenge.onrender.com/)
+
 A pipeline for processing scanned manuscripts into structured text and preparing them for multilingual translation.
+
+## Live Deployment
+
+The FastAPI web app in this repository is deployed and publicly reachable at:
+
+**https://indic-nlp-challenge.onrender.com/**
+
+| Setting | Value |
+| --- | --- |
+| Platform | [Render](https://render.com) Web Service |
+| Runtime | Python 3 (pinned by `.python-version`) |
+| Branch | `main` |
+| Build Command | `pip install fastapi "uvicorn[standard]" python-multipart google-genai python-dotenv loguru` |
+| Start Command | `uvicorn app:app --host 0.0.0.0 --port $PORT` |
+| Health Check Path | *(unset — the app has no `/healthz` route)* |
+| Required environment variable | `GEMINI_API_KEY` |
+
+> The service runs on Render's free instance tier: it spins down after roughly 15 minutes
+> of inactivity and takes a few seconds to cold-start on the next request.
+
+The build command deliberately installs only the web app's runtime dependencies. The full
+`requirements.txt` describes the offline OCR/translation pipeline and pulls in heavy
+packages (transformers, sentence-transformers, scipy, opencv, jupyterlab) that are not
+needed to serve the web app.
+
+## Web Application
+
+`app.py` serves the FastAPI backend together with the static UI in `frontend/`:
+
+- `GET /` — upload UI (`frontend/index.html`)
+- `POST /api/process` — multipart form with `file`, `source_language`, and `target_language`;
+  runs Gemini vision OCR on the uploaded image, then translates the extracted text with
+  `GeminiTranslationEngine`. Returns `{ "transcription": ..., "translation": ... }`.
+
+Run it locally:
+
+```bash
+pip install fastapi "uvicorn[standard]" python-multipart google-genai python-dotenv loguru
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+`GEMINI_API_KEY` must be available in the process environment or in a `.env` file at the
+repository root (see `.env.example`).
 
 ## Features
 
