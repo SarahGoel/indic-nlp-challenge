@@ -68,19 +68,11 @@ languages:
     script: Perso-Arabic
 
 backends:
-  indictrans2:
-    type: local
-    checkpoint: ai4bharat/indictrans2-indic-indic-dist-320M
-    language_codes: model_code
-    support_reference: "https://github.com/ai4bharat/IndicTrans2"
-    pair_validation_required: true
-
   gemini:
     type: api
-    # Verified during Phase I: model exists and the API key is accepted, but
-    # the service returned HTTP 503 (transient high demand) on every probe.
-    # gemini-2.5-flash, gemini-1.5-flash, and gemini-2.0-flash returned 404.
-    model: gemini-3.8-flash
+    # Verified reachable with the current API key. The engine also accepts a
+    # comma-separated pool here and falls back automatically.
+    model: gemini-3.6-flash
     api_key_env: GEMINI_API_KEY
     language_codes: project_language_code
     pair_validation_required: true

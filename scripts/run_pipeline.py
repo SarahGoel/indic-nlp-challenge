@@ -4,7 +4,7 @@ This script orchestrates the entire pipeline:
 1. PDF to page images
 2. OCR processing
 3. Text normalization
-4. Translation to target languages
+4. Translation to target languages (using Gemini API)
 5. DOCX export
 
 Usage:
@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 from pathlib import Path
 
@@ -23,6 +24,10 @@ from loguru import logger
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
+# The numbered helper scripts cannot be imported with a normal ``from ... import``
+# statement (module names may not start with a digit), so they are loaded by name.
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))
 
 
 def step_1_extract_pages(pdf_path: Path, output_dir: Path) -> None:
@@ -136,55 +141,52 @@ def step_3_normalize_text(ocr_dir: Path, output_dir: Path) -> None:
         raise
 
 
-def step_4_translate(normalized_dir: Path, target_lang: str, output_dir: Path) -> None:
-    """Translate text to target language."""
+def step_4_translate(normalized_dir: Path, target_lang: str, output_dir: Path, model_name: str | None = None) -> None:
+    """Translate text to target language using Gemini API."""
     logger.info("Step 4: Translating to {}...", target_lang)
-    
+
     try:
-        from indicnlp_pipeline.translation.indictrans_engine import IndicTransEngine
-        
+        from indicnlp_pipeline.translation.gemini_engine import GeminiTranslationEngine
+
         output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         norm_files = sorted(normalized_dir.glob("*.json"))
         total = len(norm_files)
-        
-        engine = IndicTransEngine()
-        engine.load_model()
-        
+
+        engine = GeminiTranslationEngine(model_name=model_name)
+
         for i, norm_file in enumerate(norm_files):
             try:
                 with open(norm_file, 'r', encoding='utf-8') as f:
                     import json
                     data = json.load(f)
-                
+
                 text = data.get('text', '')
                 if not text.strip():
                     logger.warning("Skipping empty text for {}", norm_file.name)
                     continue
-                
-                lines = text.split('\n')
-                translated = engine.translate_batch(lines, 'hin', target_lang)
-                translated_text = '\n'.join(translated)
-                
+
+                translated_text = engine.translate(text, 'hin', target_lang)
+
                 output_path = output_dir / norm_file.name
                 data['text'] = translated_text
                 data['target_language'] = target_lang
                 data['translated'] = True
-                
+
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
-                
+
                 if (i + 1) % 10 == 0:
                     logger.info("Translated {} / {} pages", i + 1, total)
-                    
+
             except Exception as exc:
                 logger.error("Translation failed for {}: {}", norm_file.name, type(exc).__name__)
-        
+
         logger.info("Step 4 complete: Translated {} pages", total)
-        
+
     except Exception as exc:
         logger.error("Translation failed: {}", type(exc).__name__)
-        logger.error("IndicTransToolkit may not be installed correctly")
+        logger.error("Gemini API key may be missing or invalid")
         raise
 
 
@@ -193,7 +195,12 @@ def step_5_export_docx(translated_dir: Path, target_lang: str, output_path: Path
     logger.info("Step 5: Exporting to DOCX...")
     
     try:
-        from scripts.18_translate_and_export import build_body, build_document_xml, write_docx, LANGUAGE_NAMES
+        export_mod = importlib.import_module("18_translate_and_export")
+        build_body = export_mod.build_body
+        build_document_xml = export_mod.build_document_xml
+        write_docx = export_mod.write_docx
+        LANGUAGE_NAMES = export_mod.LANGUAGE_NAMES
+
         
         translated_files = sorted(translated_dir.glob("*.json"))
         pages = []
@@ -233,32 +240,34 @@ def main():
     parser.add_argument("--target-language", required=True, help="Target language code (ben, guj, mar, tam, tel, kan, mal, pan, asm, ory, urd)")
     parser.add_argument("--output-dir", type=Path, default=Path("pipeline_output"), help="Output directory")
     parser.add_argument("--export-ocr", action="store_true", help="Also export original OCR to DOCX")
-    
+    parser.add_argument("--model-name", default=None, help="Gemini model or comma-separated model pool (default: GEMINI_MODEL_POOL env var, else built-in pool)")
+
     args = parser.parse_args()
-    
+
     # Set up output directories
     pages_dir = args.output_dir / "pages"
     ocr_dir = args.output_dir / "ocr"
     normalized_dir = args.output_dir / "normalized"
     translated_dir = args.output_dir / "translated"
-    
+
     logger.info("Starting pipeline for: {}", args.input)
     logger.info("Target language: {}", args.target_language)
-    
+    logger.info("Gemini model: {}", args.model_name)
+
     # Run pipeline steps
     step_1_extract_pages(args.input, pages_dir)
     step_2_run_ocr(pages_dir, ocr_dir)
     step_3_normalize_text(ocr_dir, normalized_dir)
-    step_4_translate(normalized_dir, args.target_language, translated_dir)
+    step_4_translate(normalized_dir, args.target_language, translated_dir, args.model_name)
     step_5_export_docx(translated_dir, args.target_language, args.output_dir / f"translated_{args.target_language}.docx")
-    
+
     if args.export_ocr:
         logger.info("Exporting original OCR...")
-        from scripts.17_export_ocr_docx import main as export_ocr_main
+        export_ocr_main = importlib.import_module("17_export_ocr_docx").main
         import sys
         sys.argv = ['export_ocr', '--ocr-root', str(ocr_dir), '--output', str(args.output_dir / "ocr_original.docx")]
         export_ocr_main()
-    
+
     logger.info("Pipeline complete!")
     logger.info("Output directory: {}", args.output_dir)
 

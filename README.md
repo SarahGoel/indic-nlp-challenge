@@ -78,9 +78,18 @@ repository root (see `.env.example`).
 
 ```bash
 pip install -r requirements.txt
+pip install google-generativeai
 ```
 
 ## Usage
+
+First, set your Gemini API key:
+
+```bash
+export GEMINI_API_KEY=your_api_key_here  # Linux/Mac
+# or
+set GEMINI_API_KEY=your_api_key_here  # Windows
+```
 
 Run the complete pipeline on any PDF:
 
@@ -92,7 +101,7 @@ This will:
 1. Extract pages from PDF
 2. Run OCR on all pages
 3. Normalize text
-4. Translate to target language
+4. Translate to target language using Gemini API
 5. Export translated text to DOCX
 
 To also export the original OCR text:
@@ -132,21 +141,12 @@ All outputs are written to the specified output directory (default: `pipeline_ou
 - pypdfium2 - PDF processing
 - pytesseract - OCR engine
 - Pillow - Image processing
-- transformers - Translation model
-- IndicTransToolkit - Indic language translation
+- google-generativeai - Gemini API client
 - loguru - Logging
 
 ## Translation Requirements
 
-IndicTransToolkit is required for translation. Installation requires compilation tools.
-
-**On Windows:**
-Install Microsoft C++ Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/
-
-**On Linux:**
-```bash
-pip install IndicTransToolkit
-```
+Gemini API key is required for translation. Set the `GEMINI_API_KEY` environment variable before running the pipeline.
 
 ## License
 
