@@ -8,7 +8,33 @@ from collections.abc import Sequence
 from typing import Any
 
 from google import genai
+from google.genai import types
 from loguru import logger
+
+
+#: Per-request timeout in milliseconds. Without one, a hung connection stalls
+#: the whole run indefinitely (the SDK default is effectively unbounded).
+REQUEST_TIMEOUT_MS = 120_000
+
+#: Markers for discovered models that accept ``generateContent`` but cannot do
+#: Indic translation (image generation, research agents, embeddings, ...).
+#: Trying them on every failed page only wastes time.
+NON_TEXT_MODEL_MARKERS: tuple[str, ...] = (
+    "image",
+    "embedding",
+    "aqa",
+    "deep-research",
+    "nano-banana",
+    "omni",
+    "gemma",
+    "veo",
+    "imagen",
+    "tts",
+    "audio",
+    "live",
+    "robotics",
+    "computer-use",
+)
 
 
 _LANGUAGE_NAMES: dict[str, str] = {
@@ -164,40 +190,123 @@ def build_few_shot_prompt(
     )
 
 
+# Candidate models tried, in order, when no explicit model is configured.
+# Models a key cannot use fail fast and are skipped, so an outdated entry is
+# harmless. Override with the GEMINI_MODEL_POOL (or GEMINI_MODEL) env var.
+#
+# Google retires older models for new accounts: gemini-1.5-*, gemini-2.0-flash,
+# gemini-2.5-flash and gemini-2.5-pro now return 404 NOT_FOUND. The pool
+# therefore leads with current-generation flash models (verified working:
+# gemini-3.6-flash, gemini-3.5-flash).
+DEFAULT_MODEL_POOL: tuple[str, ...] = (
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+)
+
+
+def _normalise_models(value: str | Sequence[str]) -> list[str]:
+    """Flatten a model spec (string or list) into ordered unique names."""
+    if isinstance(value, str):
+        tokens = value.replace(";", ",").split(",")
+    else:
+        tokens = []
+        for item in value:
+            tokens.extend(str(item).replace(";", ",").split(","))
+
+    models: list[str] = []
+    for token in tokens:
+        name = token.strip()
+        if name and name not in models:
+            models.append(name)
+    return models
+
+
+def _env_model_pool() -> list[str]:
+    """Read an optional model pool override from the environment."""
+    raw = os.getenv("GEMINI_MODEL_POOL") or os.getenv("GEMINI_MODEL") or ""
+    return _normalise_models(raw)
+
+
+def _is_permanent_failure(exc: BaseException) -> bool:
+    """Return True when the error means the model itself is unusable.
+
+    A 4xx response (except 429 rate limiting) will not improve on retry, so
+    that model is disabled for the rest of the session. Transient errors
+    (429, 5xx) stay in the pool.
+    """
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return 400 <= code < 500 and code != 429
+    return False
+
+
 class GeminiEngineError(RuntimeError):
-    """Raised when Gemini translation cannot be completed."""
+    """Raised when a Gemini request cannot be completed."""
 
 
 class GeminiTranslationEngine:
-    """Translate text using the Google Gemini API.
+    """Generate and translate text through the Google Gemini API.
+
+    The engine holds a *pool* of candidate models and uses the first one
+    that answers successfully. When a model is unavailable (for example a
+    renamed model returning 404) the next candidate is tried, so the code
+    keeps working without changes.
 
     Args:
-        model_name: Explicit Gemini model identifier.
+        model_name: Preferred model, a comma-separated string, or a list of
+            model names, tried in order. When omitted, GEMINI_MODEL_POOL (or
+            GEMINI_MODEL) is used, falling back to DEFAULT_MODEL_POOL.
         api_key: Optional API key. If omitted, GEMINI_API_KEY is read
             from the process environment.
         client: Optional injected Gemini-compatible client, primarily
             intended for deterministic unit tests.
+        discover: When true (default) and a real client is used, models the
+            key can actually access are appended to the pool.
 
     Notes:
         This class does not load .env files automatically, write
         translation outputs, or modify source records.
     """
 
+    #: Kept for backwards compatibility with earlier callers.
+    MODEL_POOL = DEFAULT_MODEL_POOL
+
     def __init__(
         self,
-        model_name: str,
+        model_name: str | Sequence[str] | None = None,
         api_key: str | None = None,
         client: Any | None = None,
+        discover: bool = True,
     ) -> None:
         """Initialize the engine without making an API request."""
-        if not isinstance(model_name, str) or not model_name.strip():
-            raise ValueError("model_name must be a non-empty string.")
+        if model_name is None:
+            self.models = _env_model_pool() or list(DEFAULT_MODEL_POOL)
+        else:
+            self.models = _normalise_models(model_name)
+            if not self.models:
+                raise ValueError(
+                    "model_name must be a non-empty string or a list of "
+                    "model names."
+                )
 
-        self.model_name = model_name.strip()
+        self._active_model: str | None = None
+        self._candidates: list[str] | None = None
+        self._disabled: set[str] = set()
 
         if client is not None:
             self.client = client
+            # Injected clients (tests) skip network-based discovery.
+            self._discover = False
             return
+
+        self._discover = discover
 
         resolved_api_key = (
             api_key or os.getenv("GEMINI_API_KEY") or ""
@@ -210,7 +319,10 @@ class GeminiTranslationEngine:
             )
 
         try:
-            self.client = genai.Client(api_key=resolved_api_key)
+            self.client = genai.Client(
+                api_key=resolved_api_key,
+                http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+            )
         except Exception as exc:
             # Do not log the traceback: library exception state can include
             # request headers that embed the API key.
@@ -221,6 +333,129 @@ class GeminiTranslationEngine:
             raise GeminiEngineError(
                 "Could not initialize the Gemini client."
             ) from exc
+
+    @property
+    def model_name(self) -> str:
+        """Return the working model, or the first configured candidate."""
+        return self._active_model or self.models[0]
+
+    def _discover_models(self) -> list[str]:
+        """Best-effort list of models the configured API key can access."""
+        try:
+            discovered: list[str] = []
+            for model in self.client.models.list():
+                actions = getattr(model, "supported_actions", None) or getattr(
+                    model, "supported_generation_methods", None
+                )
+                # Keep only models that can actually answer generateContent.
+                if actions and "generateContent" not in actions:
+                    continue
+                raw_name = (
+                    getattr(model, "name", None)
+                    or getattr(model, "model", None)
+                    or ""
+                )
+                name = str(raw_name).split("/")[-1].strip()
+                if any(marker in name.lower() for marker in NON_TEXT_MODEL_MARKERS):
+                    continue
+                if name and name not in discovered:
+                    discovered.append(name)
+            return discovered
+        except Exception as exc:
+            logger.debug(
+                "Gemini model discovery unavailable ({}).",
+                type(exc).__name__,
+            )
+            return []
+
+    def _candidate_models(self) -> list[str]:
+        """Return the ordered model pool, extended once by live discovery."""
+        if self._candidates is None:
+            ordered = list(self.models)
+            if self._discover:
+                for name in self._discover_models():
+                    if name not in ordered:
+                        ordered.append(name)
+            self._candidates = ordered
+        return self._candidates
+
+    def _generate_content(
+        self,
+        contents: Any,
+        config: Any | None = None,
+    ) -> str:
+        """Send one request, trying each candidate model until one works."""
+        candidates = [
+            name
+            for name in self._candidate_models()
+            if name not in self._disabled
+        ]
+
+        ordered = candidates
+        if self._active_model and self._active_model not in self._disabled:
+            ordered = [self._active_model] + [
+                name for name in candidates if name != self._active_model
+            ]
+
+        if not ordered:
+            raise GeminiEngineError(
+                "No usable Gemini model remains; every candidate was "
+                f"rejected. Disabled: {', '.join(sorted(self._disabled))}."
+            )
+
+        last_error: BaseException | None = None
+
+        for model_name in ordered:
+            logger.info("Calling Gemini model {}.", model_name)
+            try:
+                kwargs: dict[str, Any] = {
+                    "model": model_name,
+                    "contents": contents,
+                }
+                if config is not None:
+                    kwargs["config"] = config
+
+                response = self.client.models.generate_content(**kwargs)
+                text = getattr(response, "text", None)
+
+                if not isinstance(text, str) or not text.strip():
+                    raise GeminiEngineError(
+                        "Gemini returned an empty or unusable text response."
+                    )
+
+                self._active_model = model_name
+                logger.info("Gemini model {} succeeded.", model_name)
+                return text.strip()
+
+            except Exception as exc:
+                last_error = exc
+                if _is_permanent_failure(exc):
+                    # 404/403/400 etc. will not recover: drop this model.
+                    self._disabled.add(model_name)
+                logger.warning(
+                    "Gemini model {} failed ({}: {}). Trying next model.",
+                    model_name,
+                    type(exc).__name__,
+                    getattr(exc, "code", None),
+                )
+                continue
+
+        logger.error(
+            "All Gemini models failed. Tried: {}.",
+            ", ".join(ordered),
+        )
+        raise GeminiEngineError(
+            "Gemini request failed. Tried models: "
+            f"{', '.join(ordered)}. Last error: {last_error}"
+        ) from last_error
+
+    def generate(self, contents: Any, config: Any | None = None) -> str:
+        """Generate text from a prompt string or multimodal content list.
+
+        ``contents`` may be a plain string prompt, or a list combining text
+        with google.genai.types.Part payloads (as used for OCR).
+        """
+        return self._generate_content(contents, config=config)
 
     @staticmethod
     def _validate_language(language_code: str, field_name: str) -> str:
@@ -256,7 +491,7 @@ class GeminiTranslationEngine:
 
         Raises:
             ValueError: If the input or language codes are invalid.
-            GeminiEngineError: If the API call fails or returns no text.
+            GeminiEngineError: If every model in the pool fails.
         """
         if not isinstance(text, str) or not text.strip():
             raise ValueError("text must be a non-empty string.")
@@ -278,48 +513,15 @@ class GeminiTranslationEngine:
         )
 
         logger.info(
-            "Requesting Gemini translation: {} -> {} using model {}.",
+            "Requesting Gemini translation: {} -> {}.",
             source_code,
             target_code,
-            self.model_name,
         )
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-            )
-
-            translated_text = getattr(response, "text", None)
-
-            if (
-                not isinstance(translated_text, str)
-                or not translated_text.strip()
-            ):
-                raise GeminiEngineError(
-                    "Gemini returned an empty or unusable text response."
-                )
-
-            logger.info(
-                "Gemini translation completed: {} -> {}.",
-                source_code,
-                target_code,
-            )
-
-            return translated_text.strip()
-
-        except GeminiEngineError:
-            raise
-        except Exception as exc:
-            # Do not log the traceback: library exception state can include
-            # request headers that embed the API key.
-            logger.error(
-                "Gemini translation request failed: {} -> {} ({}).",
-                source_code,
-                target_code,
-                type(exc).__name__,
-            )
+            return self._generate_content(prompt)
+        except GeminiEngineError as exc:
             raise GeminiEngineError(
-                f"Gemini translation failed for "
-                f"{source_code} -> {target_code}."
+                f"Gemini translation failed for {source_code} -> "
+                f"{target_code}. {exc}"
             ) from exc

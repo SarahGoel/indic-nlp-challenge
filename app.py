@@ -34,30 +34,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Gemini engine once at startup
+# Initialize Gemini engine once at startup.
+# No model is passed: the engine uses its model pool (GEMINI_MODEL_POOL
+# env var, or the built-in default) and picks the first available model.
 try:
-    gemini_translator = GeminiTranslationEngine(model_name="gemini-2.5-flash")
+    gemini_translator = GeminiTranslationEngine()
 except Exception as init_err:
     print(f"Warning: GeminiTranslationEngine failed to initialize: {init_err}")
     gemini_translator = None
 
-# Map frontend dropdown values to your pipeline's 3-letter codes
+# Map frontend dropdown values to the pipeline's 3-letter codes.
+# Only the languages the pipeline actually supports are listed here: the
+# engine rejects any other code, so a value missing from this map is a
+# client error rather than something to silently coerce.
 LANG_MAP = {
     "hindi": "hin",
     "sanskrit": "san",
+    "assamese": "asm",
     "bengali": "ben",
     "gujarati": "guj",
-    "marathi": "mar",
-    "tamil": "tam",
-    "telugu": "tel",
     "kannada": "kan",
     "malayalam": "mal",
-    "punjabi": "pan",
-    "assamese": "asm",
+    "marathi": "mar",
     "odia": "ory",
+    "punjabi": "pan",
+    "tamil": "tam",
+    "telugu": "tel",
     "urdu": "urd",
-    "english": "eng",
 }
+
+SOURCE_LANGS = {"hin", "san"}
+TARGET_LANGS = set(LANG_MAP.values()) - SOURCE_LANGS
+
+
+def resolve_language(value: str, allowed: set[str], field_name: str) -> str:
+    """Resolve a dropdown value to a pipeline code, or raise 400."""
+    code = LANG_MAP.get((value or "").strip().lower())
+    if code not in allowed:
+        supported = ", ".join(sorted(name for name, c in LANG_MAP.items() if c in allowed))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported {field_name}: {value!r}. Supported: {supported}.",
+        )
+    return code
+
 
 @app.post("/api/process")
 def process_document(
@@ -68,14 +88,17 @@ def process_document(
     if gemini_translator is None:
         raise HTTPException(
             status_code=500,
-            detail="GEMINI_API_KEY is missing or invalid. Please check your .env file."
+            detail=(
+                "The translation service is not configured: GEMINI_API_KEY is "
+                "missing from the server environment."
+            ),
         )
 
     file_ext = os.path.splitext(file.filename)[1]
     temp_path = PROJECT_ROOT / f"temp_{uuid.uuid4().hex}{file_ext}"
-    
-    src_code = LANG_MAP.get(source_language.lower(), "hin")
-    tgt_code = LANG_MAP.get(target_language.lower(), "eng")
+
+    src_code = resolve_language(source_language, SOURCE_LANGS, "source_language")
+    tgt_code = resolve_language(target_language, TARGET_LANGS, "target_language")
 
     try:
         # Save uploaded file temporarily
@@ -88,17 +111,17 @@ def process_document(
                 f"Extract all text from this handwritten {source_language} manuscript image accurately. "
                 "Preserve the exact script, lines, and punctuation. Return only the extracted text."
             )
-            response = gemini_translator.client.models.generate_content(
-                model=gemini_translator.model_name,
-                contents=[
+            # generate() walks the model pool, so OCR uses whatever
+            # vision-capable model is actually available for this API key.
+            transcription_text = gemini_translator.generate(
+                [
                     ocr_prompt,
                     types.Part.from_bytes(
                         data=temp_path.read_bytes(),
                         mime_type=file.content_type or "image/jpeg",
                     ),
-                ],
+                ]
             )
-            transcription_text = (response.text or "").strip()
         except Exception as ocr_exc:
             raise HTTPException(status_code=500, detail=f"OCR failed: {str(ocr_exc)}")
 
