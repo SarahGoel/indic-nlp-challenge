@@ -1,7 +1,7 @@
 """Translate OCR text to target languages and export to Word documents.
 
 This script reads OCR text from the full volume, translates it to a specified
-target language using IndicTrans2, and exports the translated text to a DOCX
+target language using Google Gemini API, and exports the translated text to a DOCX
 file with proper formatting.
 
 Supported target languages:
@@ -20,9 +20,8 @@ Supported target languages:
 The source language is Hindi (hin) with Sanskrit (san) elements.
 
 Dependencies:
-- IndicTransToolkit must be installed in the Python environment
-- On Windows, may require Microsoft C++ Build Tools for compilation
-- Build tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+- Google Generative AI library: pip install google-generativeai
+- Gemini API key: Set GEMINI_API_KEY environment variable
 
 Example usage:
     python scripts/18_translate_and_export.py --target-language ben
@@ -34,12 +33,17 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from loguru import logger
+
+# Load environment variables from .env file
+load_dotenv()
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -95,28 +99,73 @@ def load_ocr_record(ocr_root: Path, page_id: str) -> dict[str, Any] | None:
         return None
 
 
-def translate_text(text: str, source_lang: str, target_lang: str) -> str:
-    """Translate text using IndicTrans2."""
+def build_engine(model_names: str | list[str] | None) -> Any:
+    """Build the Gemini engine once per run, or return None if unavailable."""
     try:
-        from indicnlp_pipeline.translation.indictrans_engine import IndicTransEngine
+        from indicnlp_pipeline.translation.gemini_engine import GeminiTranslationEngine
 
-        engine = IndicTransEngine()
-        engine.load_model()
+        return GeminiTranslationEngine(model_name=model_names)
+    except Exception as exc:
+        logger.error("Could not initialise the Gemini engine: {} - {}", type(exc).__name__, exc)
+        logger.error("Gemini API key may be missing or invalid; set GEMINI_API_KEY.")
+        return None
 
-        # Handle empty text
-        if not text or not text.strip():
-            return text
 
-        # Translate in batches for better performance
-        lines = text.split("\n")
-        translated_lines = engine.translate_batch(lines, source_lang, target_lang)
-        return "\n".join(translated_lines)
+def checkpoint_path(output_root: Path, target_language: str) -> Path:
+    """Return the JSONL checkpoint path for a target language."""
+    return output_root / f"brigu_v5_{target_language}.pages.jsonl"
+
+
+def load_checkpoint(path: Path) -> dict[str, dict[str, Any]]:
+    """Load previously translated pages from the checkpoint, keyed by page ID.
+
+    Only records flagged ``ok`` are returned, so pages that were previously
+    exported untranslated (for example during a network outage) are retried.
+    """
+    done: dict[str, dict[str, Any]] = {}
+    if not path.is_file():
+        return done
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        logger.error("Could not read checkpoint {} ({}).", path.name, type(exc).__name__)
+        return done
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if record.get("ok") and str(record.get("translated_text", "")).strip():
+            done[str(record["page_id"])] = record
+    return done
+
+
+def translate_text(text: str, source_lang: str, target_lang: str, engine: Any) -> tuple[str, bool]:
+    """Translate text using the shared Gemini engine (model pool).
+
+    The engine is built once per run so its model blacklist and last-known-good
+    model persist across pages instead of being reset on every call.
+
+    Returns:
+        A ``(translated_text, ok)`` pair. ``ok`` is False when the text was
+        empty or translation failed (the original text is returned unchanged),
+        so callers never checkpoint untranslated output.
+    """
+    # Handle empty text
+    if not text or not text.strip():
+        return text, False
+
+    if engine is None:
+        return text, False
+
+    try:
+        return engine.translate(text, source_lang, target_lang), True
     except Exception as exc:
         logger.error("Translation failed: {} - {}", type(exc).__name__, str(exc))
-        logger.error("IndicTransToolkit may not be installed or compiled correctly")
-        logger.error("For Windows, install Microsoft C++ Build Tools from:")
-        logger.error("https://visualstudio.microsoft.com/visual-cpp-build-tools/")
-        return text  # Return original if translation fails
+        return text, False  # Return original if translation fails
 
 
 def _valid_xml_chars(text: str) -> str:
@@ -278,7 +327,7 @@ def build_body(
     meta_lines = [
         f"Source language: {source_name}",
         f"Target language: {target_name}",
-        f"Translation engine: IndicTrans2",
+        f"Translation engine: Gemini API",
         f"Pages in this document: {len(pages)}",
         f"Generated (UTC): {datetime.now(UTC).isoformat(timespec='seconds')}",
     ]
@@ -369,6 +418,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Skip translation and export original OCR text (for testing).",
     )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Ignore the checkpoint and re-translate every page from scratch.",
+    )
+    parser.add_argument(
+        "--model-name",
+        default=None,
+        help=(
+            "Gemini model, or comma-separated model pool, tried in order "
+            "(default: GEMINI_MODEL_POOL env var, else built-in pool)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -396,40 +458,74 @@ def main(argv: list[str] | None = None) -> int:
     missing: list[int] = []
     empty: list[int] = []
 
-    for number in numbers:
-        page_id = page_id_for(number)
-        record = load_ocr_record(args.ocr_root, page_id)
-        found = record is not None
-        text = str(record.get("text", "")) if found else ""
+    ckpt_path = checkpoint_path(args.output_root, args.target_language)
+    cached = {} if args.no_resume else load_checkpoint(ckpt_path)
+    if cached:
+        logger.info("Resuming: found {} already-translated pages in {}.", len(cached), ckpt_path.name)
 
-        if not found:
-            missing.append(number)
-        elif not text.strip():
-            empty.append(number)
+    engine = None if args.skip_translation else build_engine(args.model_name)
 
-        source_image = (
-            str(record.get("source_image"))
-            if found and record.get("source_image")
-            else f"{page_id}.png"
-        )
+    args.output_root.mkdir(parents=True, exist_ok=True)
+    resumed = 0
 
-        if args.skip_translation:
-            translated_text = text
-        else:
-            translated_text = translate_text(text, args.source_language, args.target_language)
+    with ckpt_path.open("a", encoding="utf-8") as ckpt:
+        for number in numbers:
+            page_id = page_id_for(number)
+            record = load_ocr_record(args.ocr_root, page_id)
+            found = record is not None
+            text = str(record.get("text", "")) if found else ""
 
-        pages.append(
-            {
-                "page_number": int(record.get("page_number", number)) if found else number,
-                "page_id": page_id,
-                "source_image": source_image,
-                "translated_text": translated_text,
-                "found": found,
-            }
-        )
+            if not found:
+                missing.append(number)
+            elif not text.strip():
+                empty.append(number)
 
-        if (number % 10) == 0:
-            logger.info("Processed {} pages...", number)
+            source_image = (
+                str(record.get("source_image"))
+                if found and record.get("source_image")
+                else f"{page_id}.png"
+            )
+
+            previous = cached.get(page_id)
+            if previous is not None:
+                translated_text = str(previous["translated_text"])
+                resumed += 1
+            elif args.skip_translation:
+                translated_text, ok = text, True
+            else:
+                translated_text, ok = translate_text(
+                    text, args.source_language, args.target_language, engine
+                )
+
+            # Persist the translation as soon as it succeeds, so a stop, crash, or
+            # network outage never discards pages that are already translated.
+            if previous is None and ok:
+                ckpt.write(
+                    json.dumps(
+                        {
+                            "page_id": page_id,
+                            "page_number": number,
+                            "ok": True,
+                            "translated_text": translated_text,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+                ckpt.flush()
+
+            pages.append(
+                {
+                    "page_number": int(record.get("page_number", number)) if found else number,
+                    "page_id": page_id,
+                    "source_image": source_image,
+                    "translated_text": translated_text,
+                    "found": found,
+                }
+            )
+
+            if (number % 10) == 0:
+                logger.info("Processed {} pages...", number)
 
     body = build_body(
         pages,
@@ -444,7 +540,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Could not write the Word document ({}).", type(exc).__name__)
         return 1
 
-    logger.info("Wrote {} ({} pages).", output_path, len(pages))
+    logger.info("Wrote {} ({} pages, {} resumed from checkpoint).", output_path, len(pages), resumed)
     logger.info(
         "Summary: {} pages written, {} with OCR output, {} empty, {} missing.",
         len(pages),
